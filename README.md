@@ -1,10 +1,10 @@
 <div align="center">
 
-# ♟️ ChessCoach REWORK v15.0 — Vision HUD & Tactical Core
+# ♟️ ChessCoach REWORK v15.3.1 — Vision HUD & Tactical Core & Lua-system
 
 ### 🎯 **GET GOOD, GET CHESS COACH** 🎯
 
-*Интерактивный шахматный комбайн, тактический радар и анализатор нового поколения для **Lichess.org***
+*Интерактивный шахматный комбайн, тактический радар и анализатор нового поколения для **Lichess.org** а также для **Chess.com**  НЕ ОФИЦИАЛЬНЫЙ РЕЛИЗ*
 
 [![Telegram Channel](https://img.shields.io/badge/Telegram-CHESS%5CCOACH_DEV-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/chesscoach_dev)
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-00f5d4?style=for-the-badge)](https://developer.chrome.com/docs/extensions/mv3/)
