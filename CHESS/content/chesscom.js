@@ -2806,9 +2806,23 @@
   }
 
   function findChessComBoardElement() {
-    return document.querySelector(
-      "wc-chess-board, #board-single, #board-play-computer, #board-vs-personalities, .board-layout-chessboard .board, .board"
+    const candidates = document.querySelectorAll(
+      "wc-chess-board, chess-board, #board-single, #board-play-computer, #board-vs-personalities, .board-layout-chessboard .board, .board"
     );
+
+    let bestBoard = null;
+    let maxArea = 0;
+
+    for (const node of candidates) {
+      const rect = node.getBoundingClientRect();
+      const area = rect.width * rect.height;
+      // Выбираем самую крупную реальную доску на экране (минимум 180x180 px)
+      if (rect.width >= 180 && rect.height >= 180 && area > maxArea) {
+        maxArea = area;
+        bestBoard = node;
+      }
+    }
+    return bestBoard;
   }
 
   /**
