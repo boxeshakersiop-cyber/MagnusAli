@@ -204,7 +204,19 @@
   }
 
   function getBoardElement() {
-    return document.querySelector(".main-board cg-board, cg-board, wc-chess-board, #board-single, .board");
+    const candidates = document.querySelectorAll(
+      ".main-board cg-board, cg-board, wc-chess-board, chess-board, #board-single, #board-play-computer, .board"
+    );
+    let best = null;
+    let maxArea = 0;
+    for (const node of candidates) {
+      const r = node.getBoundingClientRect();
+      if (r.width >= 180 && r.height >= 180 && r.width * r.height > maxArea) {
+        maxArea = r.width * r.height;
+        best = node;
+      }
+    }
+    return best;
   }
 
   function getBoardRect() {
