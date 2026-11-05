@@ -3,9 +3,10 @@
 
   const FILES = "abcdefgh";
   const registeredScripts = new Map();
+  const dynamicallyLoadedFiles = new Set();
   let hudShadow = null;
 
-  // Перехватываем ТОЛЬКО закрытый ShadowRoot главного меню ChessCoach, игнорируя собственные оверлеи
+  // Перехватываем ТОЛЬКО закрытый ShadowRoot главного меню ChessCoach
   const origAttachShadow = Element.prototype.attachShadow;
   Element.prototype.attachShadow = function (init) {
     const sr = origAttachShadow.call(this, init);
@@ -51,7 +52,6 @@
     scriptsHost.style.cssText =
       "all:initial; position:fixed; top:0; left:0; width:0; height:0; z-index:2147483647; pointer-events:none;";
     document.documentElement.appendChild(scriptsHost);
-    // Вызываем origAttachShadow напрямую, чтобы никогда не затереть hudShadow
     scriptsShadow = origAttachShadow.call(scriptsHost, { mode: "open" });
 
     const baseStyle = document.createElement("style");
@@ -159,6 +159,44 @@
     `;
     scriptsShadow.appendChild(baseStyle);
     return scriptsShadow;
+  }
+
+  // ДИНАМИЧЕСКИЙ ЗАГРУЗЧИК СКРИПТОВ ИЗ ПАПКИ scripts/ БЕЗ ПРАВКИ MANIFEST.JSON
+  async function loadScriptFileFromFolder(fileName, saveToList = true) {
+    const cleanName = String(fileName || "").trim().replace(/^.*[\\/]/, "");
+    if (!cleanName || !cleanName.endsWith(".js") || cleanName === "sample.js") return false;
+    if (dynamicallyLoadedFiles.has(cleanName)) return true;
+
+    try {
+      const fileUrl = chrome.runtime.getURL("scripts/" + cleanName);
+      await import(fileUrl + "?t=" + Date.now());
+      dynamicallyLoadedFiles.add(cleanName);
+
+      if (saveToList && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.get(["cc_custom_script_files"], (res) => {
+          const list = Array.isArray(res?.cc_custom_script_files) ? res.cc_custom_script_files : [];
+          if (!list.includes(cleanName)) {
+            list.push(cleanName);
+            chrome.storage.local.set({ cc_custom_script_files: list });
+          }
+        });
+      }
+      return true;
+    } catch (err) {
+      console.warn("[ChessCoach SDK] Не удалось загрузить scripts/" + cleanName + ". Убедитесь, что файл лежит в папке scripts/ и вы нажали Обновить в chrome://extensions/.", err);
+      return false;
+    }
+  }
+
+  function autoLoadSavedScriptFiles() {
+    try {
+      if (chrome.storage && chrome.storage.local) {
+        chrome.storage.local.get(["cc_custom_script_files"], (res) => {
+          const list = Array.isArray(res?.cc_custom_script_files) ? res.cc_custom_script_files : [];
+          list.forEach((fName) => loadScriptFileFromFolder(fName, false));
+        });
+      }
+    } catch (e) {}
   }
 
   let boardOverlayWrap = null;
@@ -1284,15 +1322,60 @@
       '<div class="cc-glass-card" style="border-left:3.5px solid #c77dff; background:linear-gradient(135deg, rgba(199,125,255,0.14), rgba(0,245,212,0.08));">' +
       '<div class="cc-section-title" style="color:#c77dff;">' +
       "<span>🧩 CHESSCOACH LUA / JS SCRIPT ENGINE</span>" +
-      "<span style='color:#00f5d4;'>SDK v2.0 (60 FPS)</span>" +
+      "<span id='cc-script-loader-status' style='color:#00f5d4;'>SDK v2.0 (60 FPS)</span>" +
       "</div>" +
-      "<div style='font-size:10.5px; color:#cbd5e1; line-height:1.38;'>" +
-      "Скрипты загружаются из папки <strong>scripts/</strong> (например, <code>scripts/sample.js</code>). При включении тумблера скрипт открывает собственное окно настроек и активирует 60 FPS эффекты!" +
+      "<div style='font-size:10.5px; color:#cbd5e1; line-height:1.38; margin-bottom:8px;'>" +
+      "Положите любой скрипт (например, <code>snake.js</code>) в папку <strong>scripts/</strong>, обновите расширение в браузере и нажмите кнопку ниже, чтобы подключить его без замены <code>sample.js</code>:" +
       "</div>" +
+      '<div class="cc-actions-bar">' +
+      '<button class="cc-btn cc-btn-primary" id="cc-add-script-file-btn">📂 ПОДКЛЮЧИТЬ .JS ИЗ ПАПКИ SCRIPTS/</button>' +
+      '<button class="cc-btn cc-btn-danger" id="cc-reset-script-files-btn">🗑 СБРОСИТЬ СПИСОК</button>' +
+      "</div>" +
+      '<input type="file" id="cc-script-file-picker" accept=".js" multiple style="display:none;" />' +
       "</div>" +
       '<div id="cc-scripts-list-container" style="display:flex; flex-direction:column; gap:7px;"></div>';
 
     mainView.appendChild(pane);
+
+    const addBtn = pane.querySelector("#cc-add-script-file-btn");
+    const resetBtn = pane.querySelector("#cc-reset-script-files-btn");
+    const fileInp = pane.querySelector("#cc-script-file-picker");
+    const statusEl = pane.querySelector("#cc-script-loader-status");
+
+    if (addBtn && fileInp) {
+      addBtn.addEventListener("click", () => {
+        fileInp.value = "";
+        fileInp.click();
+      });
+
+      fileInp.addEventListener("change", async (e) => {
+        const files = Array.from(e.target.files || []);
+        let loadedCount = 0;
+        for (const f of files) {
+          const ok = await loadScriptFileFromFolder(f.name, true);
+          if (ok) loadedCount++;
+        }
+        if (statusEl) {
+          statusEl.textContent = loadedCount > 0
+            ? "✅ ПОДКЛЮЧЕНО: " + loadedCount + " СКРИПТ(ОВ)"
+            : "⚠️ СНАЧАЛА ОБНОВИТЕ РАСШИРЕНИЕ В CHROME://EXTENSIONS";
+          statusEl.style.color = loadedCount > 0 ? "#38b000" : "#ffbe0b";
+        }
+      });
+    }
+
+    if (resetBtn) {
+      resetBtn.addEventListener("click", () => {
+        try {
+          chrome.storage?.local?.set({ cc_custom_script_files: [] }, () => {
+            if (statusEl) {
+              statusEl.textContent = "🔄 СПИСОК ОЧИЩЕН (ОБНОВИТЕ СТРАНИЦУ)";
+              statusEl.style.color = "#ff4d94";
+            }
+          });
+        } catch (e) {}
+      });
+    }
 
     tabBtn.addEventListener("click", () => {
       targetShadow.querySelectorAll(".cc-tab-btn").forEach((b) => {
@@ -1407,6 +1490,7 @@
   window.CC = {
     __v2Initialized: true,
     ...defaultGlobalApi,
+    loadScriptFile: loadScriptFileFromFolder,
     registerScript(config) {
       if (!config || !config.id) return;
       const entry = {
@@ -1445,4 +1529,6 @@
       } catch (e) {}
     }
   };
+
+  autoLoadSavedScriptFiles();
 })();
